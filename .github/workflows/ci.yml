@@ -14,22 +14,21 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Build PCCorner app
+      - name: Build binaries
         shell: cmd
-        run: cl /nologo /O2 /MD src\main.c src\overlay.c src\system_info.c src\resources.rc /link user32.lib gdi32.lib comctl32.lib dxgi.lib d3d11.lib /OUT:PCCorner.exe
-
-      - name: Build injector
-        shell: cmd
-        run: cl /nologo /O2 injector\injector.c /link kernel32.lib /OUT:injector.exe
-
-      - name: Build present hook DLL
-        shell: cmd
-        run: cl /nologo /LD /O2 injector\present_hook.c /link d3d11.lib /OUT:present_hook.dll
+        run: |
+          for /f "usebackq delims=" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -find VC\Auxiliary\Build\vcvars64.bat`) do set "VCVARS=%%i"
+          if not defined VCVARS (
+            echo Failed to locate vcvars64.bat
+            exit /b 1
+          )
+          call "%VCVARS%"
+          rc /nologo /fo src\resources.res src\resources.rc
+          cl /nologo /O2 /MD src\main.c src\overlay.c src\system_info.c src\resources.res /link user32.lib gdi32.lib comctl32.lib dxgi.lib d3d11.lib /OUT:PCCorner.exe
+          cl /nologo /O2 injector\injector.c /link kernel32.lib /OUT:injector.exe
+          cl /nologo /LD /O2 injector\present_hook.c /link d3d11.lib /OUT:present_hook.dll
 
       - name: Setup NSIS
         uses: repolevedavaj/install-nsis@v1.0.2
@@ -52,8 +51,9 @@ jobs:
         if: github.event_name == 'push'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: auto-build-${{ github.run_number }}
-          name: Automated build ${{ github.run_number }}
+          tag_name: v1.1.0-alpha.1
+          name: Alpha 1.1
+          prerelease: true
           files: |
             PCCorner.exe
             injector.exe
