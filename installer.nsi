@@ -3,11 +3,11 @@ Name "PC Corner"
 OutFile "PCCorner-Installer.exe"
 InstallDir "$LOCALAPPDATA\\PC Corner"
 RequestExecutionLevel user
-SetShellVarContext current
 Page directory
 Page instfiles
 
 Section "Install"
+  SetShellVarContext current
   SetOutPath "$INSTDIR"
   SetOverwrite ifnewer
   File "PCCorner.exe"
@@ -20,6 +20,7 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
+  SetShellVarContext current
   Delete "$INSTDIR\\PCCorner.exe"
   Delete "$INSTDIR\\present_hook.dll"
   Delete "$INSTDIR\\injector.exe"
