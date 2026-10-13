@@ -1,6 +1,6 @@
 # PC Corner — lightweight Win32 FPS/VRAM/RAM/Temp corner overlay
 
-This repository contains a minimal, Windows 95 style, low-overhead Win32 application that shows a corner overlay with FPS, RAM, VRAM and temperature (best-effort) information. It also includes an optional injector and a DLL-based Present hook to measure per-application FPS (option B).
+This repository contains a minimal, Windows 95 style, low-overhead Win32 application that shows a corner overlay with FPS, RAM, VRAM and temperature (best-effort) information. It also includes an optional injector and a DLL-based Present hook to measure per-application FPS.
 
 What's included
 - src/ : main application sources (classic Win32 GUI, simple settings dialog, overlay drawing)
@@ -43,9 +43,10 @@ Usage
   3) The injected DLL creates a named mapping "Local\\PCCorner_FPS" (8 bytes). PCCorner can be extended to read this mapping and compute FPS by delta of the 64-bit counter across time.
 
 Notes and limitations
+- The overlay automatically reads the shared frame counter mapping `Local\\PCCorner_FPS` when the hook is injected and falls back to local timer FPS when no mapping is available.
 - The Present hook implemented is intentionally minimal and uses a dummy D3D11 device to locate the IDXGISwapChain::Present vtable slot and patch it. This method works for many Direct3D11-based applications but is not universal.
 - Kernel-level anti-cheat drivers or protected processes may prevent injection or hooking. Be careful: injecting into games with anti-cheat may lead to bans.
-- VRAM/temperature readings are best-effort: for accurate GPU temps and memory usage consider adding NVAPI (NVIDIA) or ADL (AMD) modules; examples are mentioned in earlier notes.
+- GPU temperature probing now attempts NVAPI (NVIDIA) first and ADL/Overdrive (AMD) as a fallback, while retaining best-effort behavior when vendor libraries are unavailable.
 - The injector uses CreateRemoteThread+LoadLibrary which requires appropriate privileges and may be blocked by some security products.
 
 Extending configuration (what I changed after option B)
@@ -59,9 +60,4 @@ Security & privacy
 License
 - MIT (see LICENSE file)
 
-If you want, I can now:
-- Add direct reading of the shared counter into PCCorner so it shows injected per-app FPS automatically when the mapping exists.
-- Add optional NVAPI module for accurate GPU temps/VRAM values.
-- Create a ready-to-run NSIS installer that bundles the exe and DLL.
-
-Which of those would you like next?
+CI now includes a Windows build workflow that compiles binaries, builds the NSIS installer, uploads artifacts, and auto-publishes a release when the push build succeeds.
