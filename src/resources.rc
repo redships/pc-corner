@@ -1,0 +1,27 @@
+#include "resource.h"
+#include <windows.h>
+
+IDI_APPICON ICON "app.ico"
+
+IDD_SETTINGS DIALOGEX 0, 0, 260, 150
+STYLE DS_SETFONT | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "PC Corner - Settings"
+FONT 8, "MS Sans Serif"
+BEGIN
+    CONTROL         "Enable overlay",            -1, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 10, 10, 120, 12, IDC_CHECK_OVERLAY
+    LTEXT           "Update rate (ms):",         IDC_STATIC_RATE, 10, 30, 90, 12
+    CONTROL         "",                          "msctls_trackbar32", TBS_AUTOTICKS, 110, 26, 130, 20, IDC_SLIDER_RATE
+    CONTROL         "Show RAM",                  -1, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 10, 56, 80, 12, IDC_CHECK_RAM
+    CONTROL         "Show VRAM",                 -1, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 100, 56, 80, 12, IDC_CHECK_VRAM
+    CONTROL         "Show Temps",                -1, "Button", BS_AUTOCHECKBOX | WS_TABSTOP, 10, 74, 80, 12, IDC_CHECK_TEMP
+    LTEXT           "Pos X:",                    -1, 10, 96, 28, 12
+    EDITTEXT        "",                          IDC_POSX, 40, 94, 40, 14, ES_NUMBER
+    LTEXT           "Pos Y:",                    -1, 90, 96, 28, 12
+    EDITTEXT        "",                          IDC_POSY, 120, 94, 40, 14, ES_NUMBER
+    LTEXT           "Font size:",                -1, 10, 116, 50, 12
+    EDITTEXT        "",                          IDC_FONTSIZE, 60, 114, 40, 14, ES_NUMBER
+    LTEXT           "Color (#RRGGBB):",          -1, 110, 116, 70, 12
+    EDITTEXT        "",                          IDC_COLOR, 190, 114, 60, 14, ES_AUTOHSCROLL
+    PUSHBUTTON      "OK",                        IDC_BTN_OK,    70, 132, 50, 14
+    PUSHBUTTON      "Cancel",                    IDC_BTN_CANCEL,150, 132, 50, 14
+END
