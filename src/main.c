@@ -209,7 +209,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPSTR lpCmdLine, int 
     g_overlayWnd = create_overlay_window(hInstance, &g_settings);
     if (g_overlayWnd) {
         /* position overlay */
-        SetWindowPos(g_overlayWnd, HWND_TOPMOST, g_settings.pos_x, g_settings.pos_y, 220, 120, SWP_SHOWWINDOW);
+        SetWindowPos(g_overlayWnd, HWND_TOPMOST, g_settings.pos_x, g_settings.pos_y, 0, 0,
+                     SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
         show_overlay(g_settings.enabled);
     }
 
