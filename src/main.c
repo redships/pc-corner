@@ -11,6 +11,56 @@ static APP_SETTINGS g_settings = {1, 500, 1, 1, 0, NULL, 8, RGB(255,255,255), 8,
 static HWND g_mainWnd = NULL;
 static HWND g_overlayWnd = NULL;
 
+static int clamp_int(int value, int min_value, int max_value) {
+    if (value < min_value) return min_value;
+    if (value > max_value) return max_value;
+    return value;
+}
+
+static unsigned int clamp_update_ms(unsigned int value) {
+    if (value < 50U) return 50U;
+    if (value > 2000U) return 2000U;
+    return value;
+}
+
+static void normalize_settings(APP_SETTINGS *s) {
+    s->enabled = s->enabled ? 1 : 0;
+    s->show_ram = s->show_ram ? 1 : 0;
+    s->show_vram = s->show_vram ? 1 : 0;
+    s->show_temps = s->show_temps ? 1 : 0;
+    s->update_ms = clamp_update_ms(s->update_ms);
+    s->font_size = clamp_int(s->font_size, 8, 28);
+    s->pos_x = clamp_int(s->pos_x, -4000, 4000);
+    s->pos_y = clamp_int(s->pos_y, -4000, 4000);
+}
+
+static int parse_color(const char *text, COLORREF *outColor) {
+    unsigned int r, g, b;
+    if (!text || !outColor) return 0;
+    if (text[0] == '#') {
+        if (sscanf(text + 1, "%02x%02x%02x", &r, &g, &b) == 3) {
+            *outColor = RGB(r, g, b);
+            return 1;
+        }
+        return 0;
+    }
+    if (sscanf(text, "%u,%u,%u", &r, &g, &b) == 3 && r <= 255 && g <= 255 && b <= 255) {
+        *outColor = RGB(r, g, b);
+        return 1;
+    }
+    return 0;
+}
+
+static void recreate_overlay_font(void) {
+    if (g_settings.font) {
+        DeleteObject(g_settings.font);
+        g_settings.font = NULL;
+    }
+    g_settings.font = CreateFontA(g_settings.font_size, 0, 0, 0, FW_NORMAL, 0, 0, 0, ANSI_CHARSET,
+                                  OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, FF_DONTCARE,
+                                  "MS Sans Serif");
+}
+
 static void load_settings_from_registry(APP_SETTINGS *s) {
     HKEY hKey;
     if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\RedShips\\PCCorner", 0, KEY_READ, &hKey) == ERROR_SUCCESS) {
@@ -35,6 +85,7 @@ static void load_settings_from_registry(APP_SETTINGS *s) {
         if (RegQueryValueExA(hKey, "Color", NULL, &type, (LPBYTE)&val, &size) == ERROR_SUCCESS) s->color = (COLORREF)val;
         RegCloseKey(hKey);
     }
+    normalize_settings(s);
 }
 
 static void save_settings_to_registry(APP_SETTINGS *s) {
@@ -58,6 +109,7 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
     case WM_INITDIALOG:
         CheckDlgButton(hwnd, IDC_CHECK_OVERLAY, g_settings.enabled ? BST_CHECKED : BST_UNCHECKED);
         SendDlgItemMessage(hwnd, IDC_SLIDER_RATE, TBM_SETRANGE, TRUE, MAKELONG(50, 2000));
+        SendDlgItemMessage(hwnd, IDC_SLIDER_RATE, TBM_SETTICFREQ, 250, 0);
         SendDlgItemMessage(hwnd, IDC_SLIDER_RATE, TBM_SETPOS, TRUE, g_settings.update_ms);
         CheckDlgButton(hwnd, IDC_CHECK_RAM, g_settings.show_ram ? BST_CHECKED : BST_UNCHECKED);
         CheckDlgButton(hwnd, IDC_CHECK_VRAM, g_settings.show_vram ? BST_CHECKED : BST_UNCHECKED);
@@ -72,6 +124,7 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         return TRUE;
     case WM_COMMAND:
         if (LOWORD(wParam) == IDC_BTN_OK) {
+            int previous_font_size = g_settings.font_size;
             g_settings.enabled = (IsDlgButtonChecked(hwnd, IDC_CHECK_OVERLAY) == BST_CHECKED);
             g_settings.update_ms = (unsigned int)SendDlgItemMessage(hwnd, IDC_SLIDER_RATE, TBM_GETPOS, 0, 0);
             g_settings.show_ram = (IsDlgButtonChecked(hwnd, IDC_CHECK_RAM) == BST_CHECKED);
@@ -80,13 +133,17 @@ INT_PTR CALLBACK SettingsDlgProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             g_settings.pos_x = GetDlgItemInt(hwnd, IDC_POSX, NULL, TRUE);
             g_settings.pos_y = GetDlgItemInt(hwnd, IDC_POSY, NULL, TRUE);
             g_settings.font_size = GetDlgItemInt(hwnd, IDC_FONTSIZE, NULL, FALSE);
-            char colorbuf[64]; GetDlgItemTextA(hwnd, IDC_COLOR, colorbuf, sizeof(colorbuf));
-            /* parse #RRGGBB or R,G,B */
-            if (colorbuf[0] == '#') {
-                unsigned int r,g,b;
-                if (sscanf(colorbuf+1, "%02x%02x%02x", &r, &g, &b) == 3) {
-                    g_settings.color = RGB(r,g,b);
+            normalize_settings(&g_settings);
+            {
+                char colorbuf[64];
+                COLORREF parsedColor;
+                GetDlgItemTextA(hwnd, IDC_COLOR, colorbuf, sizeof(colorbuf));
+                if (parse_color(colorbuf, &parsedColor)) {
+                    g_settings.color = parsedColor;
                 }
+            }
+            if (previous_font_size != g_settings.font_size) {
+                recreate_overlay_font();
             }
             save_settings_to_registry(&g_settings);
             update_overlay_settings(&g_settings);
@@ -134,6 +191,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPSTR lpCmdLine, int 
     InitCommonControlsEx(&ic);
 
     load_settings_from_registry(&g_settings);
+    normalize_settings(&g_settings);
 
     WNDCLASSA wc = {0};
     wc.lpfnWndProc = MainWndProc;
@@ -147,8 +205,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPSTR lpCmdLine, int 
     g_mainWnd = mainWin;
 
     /* create overlay */
-    g_settings.font = CreateFontA(g_settings.font_size,0,0,0,FW_NORMAL,0,0,0,ANSI_CHARSET,OUT_DEFAULT_PRECIS,CLIP_DEFAULT_PRECIS,
-                                  DEFAULT_QUALITY,FF_DONTCARE,"MS Sans Serif");
+    recreate_overlay_font();
     g_overlayWnd = create_overlay_window(hInstance, &g_settings);
     if (g_overlayWnd) {
         /* position overlay */
@@ -163,6 +220,11 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrev, LPSTR lpCmdLine, int 
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
+    }
+
+    if (g_settings.font) {
+        DeleteObject(g_settings.font);
+        g_settings.font = NULL;
     }
 
     return (int)msg.wParam;

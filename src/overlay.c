@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>
 #include "overlay.h"
 #include "system_info.h"
 
@@ -8,6 +9,23 @@ static HWND g_overlay = NULL;
 static APP_SETTINGS *g_settings = NULL;
 static int fps_value = 0;
 static LARGE_INTEGER perf_freq;
+
+static int count_overlay_lines(const APP_SETTINGS *settings) {
+    int lines = 1; /* FPS */
+    if (settings->show_ram) lines++;
+    if (settings->show_vram) lines++;
+    if (settings->show_temps) lines += 2;
+    return lines;
+}
+
+static void calc_overlay_dimensions(const APP_SETTINGS *settings, int *width, int *height) {
+    int line_count = count_overlay_lines(settings);
+    int line_height = settings->font_size + 6;
+    if (line_height < 14) line_height = 14;
+    *width = 220 + (settings->font_size > 8 ? (settings->font_size - 8) * 8 : 0);
+    if (*width < 220) *width = 220;
+    *height = 12 + (line_count * line_height);
+}
 
 static void draw_overlay(HWND hwnd, HDC hdc) {
     RECT r;
@@ -22,18 +40,25 @@ static void draw_overlay(HWND hwnd, HDC hdc) {
     HFONT oldf = (HFONT)SelectObject(hdc, g_settings->font ? g_settings->font : GetStockObject(DEFAULT_GUI_FONT));
     SetTextColor(hdc, g_settings->color);
 
+    TEXTMETRICA tm;
+    int line_height = 16;
+    if (GetTextMetricsA(hdc, &tm)) {
+        line_height = tm.tmHeight + 2;
+        if (line_height < 14) line_height = 14;
+    }
+
     int y = 6;
     char buf[256];
 
     snprintf(buf, sizeof(buf), "FPS: %d", fps_value);
-    TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += 16;
+    TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += line_height;
 
     if (g_settings->show_ram) {
         RAM_INFO ri; query_ram(&ri);
         double used = (ri.totalPhys - ri.availPhys) / 1024.0 / 1024.0;
         double total = ri.totalPhys / 1024.0 / 1024.0;
         snprintf(buf, sizeof(buf), "RAM: %.0f MB / %.0f MB", used, total);
-        TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += 16;
+        TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += line_height;
     }
     if (g_settings->show_vram) {
         VRAM_INFO vi; query_vram(&vi);
@@ -46,7 +71,7 @@ static void draw_overlay(HWND hwnd, HDC hdc) {
         } else {
             snprintf(buf, sizeof(buf), "VRAM: n/a");
         }
-        TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += 16;
+        TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += line_height;
     }
     if (g_settings->show_temps) {
         TEMP_INFO ti; query_temps(&ti);
@@ -54,13 +79,13 @@ static void draw_overlay(HWND hwnd, HDC hdc) {
             snprintf(buf, sizeof(buf), "CPU temp: %d C", ti.cpuTempC);
         else
             snprintf(buf, sizeof(buf), "CPU temp: n/a");
-        TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += 16;
+        TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += line_height;
 
         if (ti.gpuTempC >= 0)
             snprintf(buf, sizeof(buf), "GPU temp: %d C", ti.gpuTempC);
         else
             snprintf(buf, sizeof(buf), "GPU temp: n/a");
-        TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += 16;
+        TextOutA(hdc, 6, y, buf, (int)strlen(buf)); y += line_height;
     }
 
     SelectObject(hdc, oldf);
@@ -81,8 +106,7 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
         }
         last = now;
 
-        InvalidateRect(hwnd, NULL, TRUE);
-        UpdateWindow(hwnd);
+        InvalidateRect(hwnd, NULL, FALSE);
         return 0;
     }
     case WM_PAINT: {
@@ -110,19 +134,26 @@ HWND create_overlay_window(HINSTANCE hInstance, APP_SETTINGS *settings) {
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     RegisterClassA(&wc);
 
+    int width, height;
+    calc_overlay_dimensions(settings, &width, &height);
     DWORD style = WS_POPUP | WS_VISIBLE | WS_BORDER;
     HWND hwnd = CreateWindowExA(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, wc.lpszClassName, "", style,
-        settings->pos_x, settings->pos_y, 220, 120, NULL, NULL, hInstance, NULL);
+        settings->pos_x, settings->pos_y, width, height, NULL, NULL, hInstance, NULL);
     if (!hwnd) return NULL;
 
+    g_overlay = hwnd;
     return hwnd;
 }
 
 void update_overlay_settings(APP_SETTINGS *settings) {
     g_settings = settings;
     if (g_overlay) {
+        int width, height;
+        calc_overlay_dimensions(g_settings, &width, &height);
+        SetWindowPos(g_overlay, HWND_TOPMOST, g_settings->pos_x, g_settings->pos_y, width, height,
+                     SWP_NOACTIVATE | SWP_SHOWWINDOW);
         SetTimer(g_overlay, 1, g_settings->update_ms, NULL);
-        InvalidateRect(g_overlay, NULL, TRUE);
+        InvalidateRect(g_overlay, NULL, FALSE);
     }
 }
 

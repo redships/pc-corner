@@ -28,6 +28,14 @@ Build instructions (MSVC)
      cl /LD /O2 injector\\present_hook.c /link d3d11.lib
    Produces present_hook.dll
 
+CI build
+- GitHub Actions workflow: `.github/workflows/ci.yml`
+- Triggers on push and pull requests, and builds:
+  - `PCCorner.exe`
+  - `injector.exe`
+  - `present_hook.dll`
+- Produced binaries are uploaded as a workflow artifact (`pc-corner-windows-binaries`).
+
 Build (MinGW)
 - Similar commands using gcc; link against -ld3d11 -ldxgi as available. For example:
   gcc -O2 -o PCCorner.exe src/main.c src/overlay.c src/system_info.c -lgdi32 -lcomctl32 -ldxgi -ld3d11
@@ -52,6 +60,12 @@ Extending configuration (what I changed after option B)
 - Settings now include overlay position (Pos X, Pos Y), font size, and color (#RRGGBB). These are persisted in HKCU\\Software\\RedShips\\PCCorner.
 - The settings dialog remains simple (classic controls) to preserve the 95-style look.
 - To integrate per-application FPS into the overlay: read the 64-bit counter from the named mapping "Local\\PCCorner_FPS" and compute delta/frame-per-second in the overlay update loop. This keeps the overlay app decoupled and low-overhead (it only reads 8 bytes periodically).
+
+UI tuning notes
+- Overlay window size now adapts to active metrics and configured font size.
+- Overlay repaint now avoids forced synchronous redraws, reducing UI jitter and CPU spikes.
+- Settings input values are normalized (update interval and font size clamped to sane bounds).
+- Changing font size in Settings now immediately recreates the overlay font.
 
 Security & privacy
 - This software reads local system metrics only. The injector and hooking functionality require caution and user consent.
