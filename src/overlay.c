@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <stdio.h>
+#include <string.h>
 #include "overlay.h"
 #include "system_info.h"
 
@@ -8,6 +9,34 @@ static HWND g_overlay = NULL;
 static APP_SETTINGS *g_settings = NULL;
 static int fps_value = 0;
 static LARGE_INTEGER perf_freq;
+static HANDLE g_fpsMap = NULL;
+static volatile LONG64 *g_sharedFrameCounter = NULL;
+
+static void release_fps_mapping(void) {
+    if (g_sharedFrameCounter) {
+        UnmapViewOfFile((LPCVOID)g_sharedFrameCounter);
+        g_sharedFrameCounter = NULL;
+    }
+    if (g_fpsMap) {
+        CloseHandle(g_fpsMap);
+        g_fpsMap = NULL;
+    }
+}
+
+static int ensure_fps_mapping(void) {
+    if (g_sharedFrameCounter) return 1;
+    if (!g_fpsMap) {
+        g_fpsMap = OpenFileMappingA(FILE_MAP_READ, FALSE, "Local\\PCCorner_FPS");
+        if (!g_fpsMap) return 0;
+    }
+    g_sharedFrameCounter = (volatile LONG64*)MapViewOfFile(g_fpsMap, FILE_MAP_READ, 0, 0, sizeof(LONG64));
+    if (!g_sharedFrameCounter) {
+        CloseHandle(g_fpsMap);
+        g_fpsMap = NULL;
+        return 0;
+    }
+    return 1;
+}
 
 static void draw_overlay(HWND hwnd, HDC hdc) {
     RECT r;
@@ -75,9 +104,23 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     case WM_TIMER: {
         LARGE_INTEGER now; QueryPerformanceCounter(&now);
         static LARGE_INTEGER last = {0};
+        static LONG64 lastSharedCount = -1;
         if (last.QuadPart != 0) {
             double delta = (double)(now.QuadPart - last.QuadPart) / (double)perf_freq.QuadPart;
-            if (delta > 0.0) fps_value = (int)(1.0 / delta + 0.5);
+            if (delta > 0.0) {
+                int fallbackFps = (int)(1.0 / delta + 0.5);
+                int hookedFps = -1;
+                if (ensure_fps_mapping()) {
+                    LONG64 currentCount = *g_sharedFrameCounter;
+                    if (lastSharedCount >= 0 && currentCount >= lastSharedCount) {
+                        hookedFps = (int)(((double)(currentCount - lastSharedCount) / delta) + 0.5);
+                    }
+                    lastSharedCount = currentCount;
+                } else {
+                    lastSharedCount = -1;
+                }
+                fps_value = (hookedFps >= 0) ? hookedFps : fallbackFps;
+            }
         }
         last = now;
 
@@ -94,6 +137,7 @@ static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM 
     }
     case WM_DESTROY:
         KillTimer(hwnd, 1);
+        release_fps_mapping();
         g_overlay = NULL;
         return 0;
     default:
@@ -114,7 +158,7 @@ HWND create_overlay_window(HINSTANCE hInstance, APP_SETTINGS *settings) {
     HWND hwnd = CreateWindowExA(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, wc.lpszClassName, "", style,
         settings->pos_x, settings->pos_y, 220, 120, NULL, NULL, hInstance, NULL);
     if (!hwnd) return NULL;
-
+    g_overlay = hwnd;
     return hwnd;
 }
 
